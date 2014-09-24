@@ -114,8 +114,8 @@ static void audio_encode_example(const char *filename)
 
     printf("Encode audio file %s\n", filename);
 
-    /* find the MP2 encoder */
-    codec = avcodec_find_encoder(AV_CODEC_ID_MP2);
+    /* find the MP3 encoder */
+    codec = avcodec_find_encoder(AV_CODEC_ID_MP3);
     if (!codec) {
         fprintf(stderr, "Codec not found\n");
         exit(1);
@@ -131,7 +131,7 @@ static void audio_encode_example(const char *filename)
     c->bit_rate = 64000;
 
     /* check that the encoder supports s16 pcm input */
-    c->sample_fmt = AV_SAMPLE_FMT_S16;
+    c->sample_fmt = AV_SAMPLE_FMT_S16P;
     if (!check_sample_fmt(codec, c->sample_fmt)) {
         fprintf(stderr, "Encoder does not support sample format %s",
                 av_get_sample_fmt_name(c->sample_fmt));
@@ -187,7 +187,23 @@ static void audio_encode_example(const char *filename)
         fprintf(stderr, "Could not setup audio frame\n");
         exit(1);
     }
+    int planar     = av_sample_fmt_is_planar(frame->format);
+    int channels   = av_get_channel_layout_nb_channels(frame->channel_layout);
+    int planes     = planar ? channels : 1;
+    int bps        = av_get_bytes_per_sample(frame->format);
+    int plane_size = bps * frame->nb_samples * (planar ? 1 : channels);
 
+    printf("planar: %d\n", planar);
+    printf("channels: %d\n", channels);
+    printf("planes: %d\n", planes);
+    printf("bps: %d\n", bps);
+    printf("plane_size: %d\n", plane_size);
+
+    printf("channels: %d\n", c->channels);
+    printf("sample rate: %d\n", c->sample_rate);
+    printf("buffer size: %d\n", buffer_size);
+    printf("frame size: %d\n", c->frame_size);
+    printf("sizeof sample: %d\n", sizeof(samples[0]));
     /* encode a single tone sound */
     t = 0;
     tincr = 2 * M_PI * 440.0 / c->sample_rate;
@@ -197,10 +213,10 @@ static void audio_encode_example(const char *filename)
         pkt.size = 0;
 
         for (j = 0; j < c->frame_size; j++) {
-            samples[2*j] = (int)(sin(t) * 10000);
-
-            for (k = 1; k < c->channels; k++)
-                samples[2*j + k] = samples[2*j];
+            for (k = 0; k < planes; k++) {
+                uint16_t *plane = frame->extended_data[k];
+                plane[j] = (uint16_t)(sin(t) * 10000);
+            }
             t += tincr;
         }
         /* encode the samples */
@@ -254,7 +270,7 @@ static void audio_decode_example(const char *outfilename, const char *filename)
     printf("Decode audio file %s to %s\n", filename, outfilename);
 
     /* find the mpeg audio decoder */
-    codec = avcodec_find_decoder(AV_CODEC_ID_MP2);
+    codec = avcodec_find_decoder(AV_CODEC_ID_MP3);
     if (!codec) {
         fprintf(stderr, "Codec not found\n");
         exit(1);
@@ -632,9 +648,9 @@ int main(int argc, char **argv)
         printf("usage: %s output_type\n"
                "API example program to decode/encode a media stream with libavcodec.\n"
                "This program generates a synthetic stream and encodes it to a file\n"
-               "named test.h264, test.mp2 or test.mpg depending on output_type.\n"
+               "named test.h264, test.mp3 or test.mpg depending on output_type.\n"
                "The encoded stream is then decoded and written to a raw data output.\n"
-               "output_type must be choosen between 'h264', 'mp2', 'mpg'.\n",
+               "output_type must be choosen between 'h264', 'mp3', 'mpg'.\n",
                argv[0]);
         return 1;
     }
@@ -642,14 +658,14 @@ int main(int argc, char **argv)
 
     if (!strcmp(output_type, "h264")) {
         video_encode_example("test.h264", AV_CODEC_ID_H264);
-    } else if (!strcmp(output_type, "mp2")) {
-        audio_encode_example("test.mp2");
-        audio_decode_example("test.sw", "test.mp2");
+    } else if (!strcmp(output_type, "mp3")) {
+        audio_encode_example("test.mp3");
+        audio_decode_example("test.sw", "test.mp3");
     } else if (!strcmp(output_type, "mpg")) {
         video_encode_example("test.mpg", AV_CODEC_ID_MPEG1VIDEO);
         video_decode_example("test%02d.pgm", "test.mpg");
     } else {
-        fprintf(stderr, "Invalid output type '%s', choose between 'h264', 'mp2', or 'mpg'\n",
+        fprintf(stderr, "Invalid output type '%s', choose between 'h264', 'mp3', or 'mpg'\n",
                 output_type);
         return 1;
     }
